@@ -58,10 +58,11 @@ typedef enum {
 	TurnSwitch  = 13
 } Mode;
 
-uint8_t ButtonState[2] 	= {1,1};
-uint16_t LEDfrequency 	= 10;
-uint8_t LEDIsOn 		= 0;
-uint32_t LEDTimestamp 	= 0;
+uint8_t ButtonState[2] 	 	= {0};
+uint8_t ButtonIsPress[2]	= {0};
+int LEDfrequency 			= 1;
+uint8_t LEDIsOn 			= 0;
+uint32_t LEDTimestamp 		= 0;
 
 /* USER CODE END PV */
 
@@ -108,7 +109,7 @@ int main(void) {
 	MX_GPIO_Init();
 	MX_USART2_UART_Init();
 	/* USER CODE BEGIN 2 */
-	{ // for local parameter --> more memories
+	{ // for local parameter --> more memoriesa
 //		char temp[] = "HELLO WORLD\r\n please type something to test UART\r\n";
 //		HAL_UART_Transmit(&huart2, (uint8_t*) temp, strlen(temp), 1000);
 	}
@@ -119,10 +120,6 @@ int main(void) {
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1) {
-		/*Method 1 Polling Mode*/
-
-//		UARTRecieveAndResponsePolling();
-		/*Method 2 Interrupt Mode*/
 		HAL_UART_Receive_IT(&huart2, (uint8_t*) RxDataBuffer, 32);
 
 		/*Method 2 W/ 1 Char Received*/
@@ -130,24 +127,37 @@ int main(void) {
 		if (inputchar != -1) {
 
 			sprintf(TxDataBuffer, "ReceivedChar:[%c]\r\n", inputchar);
-			HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,
-					strlen(TxDataBuffer), 1000);
+			HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 1000);
+		}// for check by looking at monitor
+
+//----------------------------------------- Display LED ------------------------------------------------
+		if(LEDIsOn == 0 || LEDfrequency <= 0){
+			HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, 0);
 		}
-
-		/*This section just simulate Work Load*/
-//		HAL_Delay(100);
-//		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-		/* USER CODE END WHILE */
-
-		/* USER CODE BEGIN 3 */
+		else{
+			if(HAL_GetTick() - LEDTimestamp >= (500/LEDfrequency)){
+				LEDTimestamp = HAL_GetTick();
+				HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+			}
+		}
+//----------------------------------------- Display Button State ---------------------------------------
+		ButtonState[0] = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
+		if(ButtonState[0] == 1 && ButtonState[1] == 1)
+		{
+			ButtonIsPress[0] = 1;
+		}
+		else
+		{
+			ButtonIsPress[0] = 0;
+		}
 //--------------------------------------------- Home page ---------------------------------------------
 		switch(State){
 			case Start:
 				sprintf(TxDataBuffer, "----Home Page----\n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
-				sprintf(TxDataBuffer, "Press 0 control LED \n\r");
+				sprintf(TxDataBuffer, "Press 0: control LED \n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
-				sprintf(TxDataBuffer, "Press 1 button status \n\r");
+				sprintf(TxDataBuffer, "Press 1: button status \n\n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
 				State = wait;
 				break;
@@ -162,7 +172,7 @@ int main(void) {
 					State = Mode1;
 					break;
 				default:
-					sprintf(TxDataBuffer, "press only [0] or [1]");
+					sprintf(TxDataBuffer, "press only [0] or [1] \n\n\r");
 					HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
 					State = wait;
 					break;
@@ -170,32 +180,95 @@ int main(void) {
 				break;
 //--------------------------------------------- LED Control ---------------------------------------------
 			case Mode0:
-				sprintf(TxDataBuffer, "Mode0: LEDControl");
+				sprintf(TxDataBuffer, "Mode0: LEDControl\n\r");
+				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+				sprintf(TxDataBuffer, "Press a: +1 Hz \n\r");
+				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+				sprintf(TxDataBuffer, "Press s: -1 Hz \n\r");
+				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+				sprintf(TxDataBuffer, "Press d: turn on-off LED \n\r");
+				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+				sprintf(TxDataBuffer, "Press x: back to home page \n\n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
 				State = wait0;
 				break;
 			case wait0:
 				switch(inputchar){
+					case -1:
+						break;
+					case 'a':
+						LEDfrequency += 1;
+						sprintf(TxDataBuffer, "LED blink at %d Hz\r\n\n", LEDfrequency);
+						HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 1000);
+						break;
+					case 's':
+						LEDfrequency -= 1;
+						if(LEDfrequency < 0){
+							sprintf(TxDataBuffer, "LED off already, please press [a] to increase frequency\r\n\n", LEDfrequency);
+							HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 1000);
+							LEDfrequency = 0;
+						}
+						else{
+							sprintf(TxDataBuffer, "LED blink at %d Hz\r\n\n", LEDfrequency);
+							HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 1000);
+						}
+						break;
+					case 'd':
+						if(LEDIsOn == 1){
+							LEDIsOn = 0;
+							sprintf(TxDataBuffer, "(turn off)LED blink at 0 Hz\r\n\n");
+							HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 1000);
+						}
+						else{
+							LEDIsOn = 1;
+							sprintf(TxDataBuffer, "(turn on)LED blink at %d Hz\r\n\n", LEDfrequency);
+							HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 1000);
+						}
+
+						break;
 					case 'x':
 						State = Start;
 						break;
 					default:
+						sprintf(TxDataBuffer, "press only [a],[s],[d] or [x] \n\n\r");
+						HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
 						State = wait0;
 						break;
 					}
 				break;
 //--------------------------------------------- Button Status ---------------------------------------------
 			case Mode1:
-				sprintf(TxDataBuffer, "Mode1: ButtonStatus");
+				sprintf(TxDataBuffer, "Mode1: ButtonStatus\n\r");
+				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+				sprintf(TxDataBuffer, "Press blue button on board: Change status \n\r");
+				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+				sprintf(TxDataBuffer, "Press x: back to home page \n\n\r");
 				HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
 				State = wait1;
 				break;
 			case wait1:
+				if(ButtonIsPress[0] != ButtonIsPress[1])
+				{
+					if(ButtonIsPress[0] == 0)
+					{
+						sprintf(TxDataBuffer, "Yep, Button is pressed \n\n\r");
+						HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+					}
+					else
+					{
+						sprintf(TxDataBuffer, "Nope, Button is not pressed \n\n\r");
+						HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
+					}
+				}
 				switch(inputchar){
+					case -1:
+						break;
 					case 'x':
 						State = Start;
 						break;
 					default:
+						sprintf(TxDataBuffer, "press only [x]\n\n\r");
+						HAL_UART_Transmit(&huart2, (uint8_t*) TxDataBuffer,strlen(TxDataBuffer), 100);
 						State = wait1;
 						break;
 					}
@@ -204,7 +277,13 @@ int main(void) {
 				State = Start;
 			break;
 		}
-}
+		ButtonIsPress[1] = ButtonIsPress[0];
+		ButtonState[1] = ButtonState[0];
+	}
+		/* USER CODE END WHILE */
+
+		/* USER CODE BEGIN 3 */
+
 /* USER CODE END 3 */
 }
 
